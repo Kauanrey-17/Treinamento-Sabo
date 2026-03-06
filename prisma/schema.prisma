@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  senha     String
+  criadoEm DateTime @default(now())
+}
+
+model Funcionario {
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  senha     String
+  setor     String
+  ativo     Boolean  @default(true)
+  criadoEm DateTime @default(now())
+}
+
+model Presenca {
+  id           String   @id @default(uuid())
+  nome         String
+  setor        String
+  turno        String
+  email        String
+  presente     Boolean  @default(true)
+  dataRegistro DateTime @default(now())
+}
+
+model Quiz {
+  id           String   @id @default(uuid())
+  nome         String
+  respostas    Json
+  nota         Float
+  dataRegistro DateTime @default(now())
+}
+
+model Praticas {
+  id             String   @id @default(uuid())
+  nome           String
+  criouCanal     Boolean  @default(false)
+  enviouMensagem Boolean  @default(false)
+  subiuArquivo   Boolean  @default(false)
+  criouBucket    Boolean  @default(false)
+  criouTarefa    Boolean  @default(false)
+  dataRegistro   DateTime @default(now())
+}
