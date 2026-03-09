@@ -2,10 +2,9 @@ import type { Metadata, Viewport } from "next"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { ThemeProvider } from "@/components/theme-provider"
-import { AppShell } from "@/components/app-shell"
 import { Toaster } from "@/components/ui/sonner"
+import { NextAuthProvider } from "@/components/session-provider"
 import "./globals.css"
-import { NextAuthProvider } from "@/components/session-provider"  // ← adicione
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const jetbrainsMono = JetBrains_Mono({
@@ -15,8 +14,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "SABO – Portal de Treinamentos",
-  description:
-    "Plataforma de treinamentos corporativos da SABO.",
+  description: "Plataforma de treinamentos corporativos da SABO.",
 }
 
 export const viewport: Viewport = {
@@ -32,12 +30,13 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
-        <NextAuthProvider>  {/* ← adicione */}
+        <NextAuthProvider>
           <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-            <AppShell>{children}</AppShell>
+            {/* AppShell foi movido para app/(main)/layout.tsx */}
+            {children}
             <Toaster richColors position="top-right" />
           </ThemeProvider>
-        </NextAuthProvider>  {/* ← adicione */}
+        </NextAuthProvider>
         <Analytics />
       </body>
     </html>

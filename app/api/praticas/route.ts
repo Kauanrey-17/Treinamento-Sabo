@@ -15,7 +15,7 @@ export async function POST(request: Request) {
       criouTarefa: body.criouTarefa ?? false,
       dataRegistro: new Date().toISOString(),
     }
-    const saved = addPraticas(record)
+    const saved = await addPraticas(record) // ✅ await adicionado
     return NextResponse.json(saved, { status: 201 })
   } catch {
     return NextResponse.json(
@@ -26,5 +26,5 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  return NextResponse.json(listPraticas())
+  return NextResponse.json(await listPraticas()) // ✅ await adicionado
 }

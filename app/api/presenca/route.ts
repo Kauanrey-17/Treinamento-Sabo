@@ -1,29 +1,26 @@
 import { NextResponse } from "next/server"
-import { addPresenca, listPresenca } from "@/lib/db"
-import type { PresencaRecord } from "@/lib/types"
+import { db } from "@/lib/db"
 
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const record: PresencaRecord = {
-      id: crypto.randomUUID(),
-      nome: body.nome,
-      setor: body.setor,
-      turno: body.turno,
-      email: body.email,
-      presente: body.presente ?? true,
-      dataRegistro: new Date().toISOString(),
-    }
-    const saved = addPresenca(record)
-    return NextResponse.json(saved, { status: 201 })
+    const record = await db.presenca.create({
+      data: {
+        id: crypto.randomUUID(),
+        nome: body.nome,
+        setor: body.setor,
+        turno: body.turno,
+        email: body.email,
+        presente: body.presente ?? true,
+      },
+    })
+    return NextResponse.json(record, { status: 201 })
   } catch {
-    return NextResponse.json(
-      { error: "Erro ao registrar presenca" },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: "Erro ao registrar presença." }, { status: 400 })
   }
 }
 
 export async function GET() {
-  return NextResponse.json(listPresenca())
+  const data = await db.presenca.findMany({ orderBy: { dataRegistro: "desc" } })
+  return NextResponse.json(data)
 }

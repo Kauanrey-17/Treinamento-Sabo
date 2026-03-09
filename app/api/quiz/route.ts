@@ -1,27 +1,27 @@
 import { NextResponse } from "next/server"
-import { addQuiz, listQuiz } from "@/lib/db"
-import type { QuizRecord } from "@/lib/types"
+import { db } from "@/lib/db"
 
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const record: QuizRecord = {
-      id: crypto.randomUUID(),
-      nome: body.nome,
-      respostas: body.respostas,
-      nota: body.nota,
-      dataRegistro: new Date().toISOString(),
-    }
-    const saved = addQuiz(record)
-    return NextResponse.json(saved, { status: 201 })
+    const record = await db.praticas.create({
+      data: {
+        id: crypto.randomUUID(),
+        nome: body.nome,
+        criouCanal: body.criouCanal ?? false,
+        enviouMensagem: body.enviouMensagem ?? false,
+        subiuArquivo: body.subiuArquivo ?? false,
+        criouBucket: body.criouBucket ?? false,
+        criouTarefa: body.criouTarefa ?? false,
+      },
+    })
+    return NextResponse.json(record, { status: 201 })
   } catch {
-    return NextResponse.json(
-      { error: "Erro ao registrar quiz" },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: "Erro ao registrar práticas." }, { status: 400 })
   }
 }
 
 export async function GET() {
-  return NextResponse.json(listQuiz())
+  const data = await db.praticas.findMany({ orderBy: { dataRegistro: "desc" } })
+  return NextResponse.json(data)
 }
