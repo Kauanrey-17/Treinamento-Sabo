@@ -2,20 +2,16 @@ import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import { compare } from "bcryptjs"
 import { db } from "./db"
+import { authConfig } from "./auth.config"
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  secret: process.env.AUTH_SECRET,  // ← adicione
-  trustHost: true,                   // ← adicione
-  session: { strategy: "jwt" },
-  pages: {
-    signIn: "/login",
-  },
+  ...authConfig,
   providers: [
     Credentials({
       credentials: {
         email: {},
         senha: {},
-        tipo: {}, // "admin" ou "funcionario"
+        tipo: {},
       },
       async authorize(credentials) {
         const email = credentials?.email as string
@@ -45,14 +41,4 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     }),
   ],
-  callbacks: {
-    jwt({ token, user }) {
-      if (user) token.role = (user as any).role
-      return token
-    },
-    session({ session, token }) {
-      if (session.user) (session.user as any).role = token.role
-      return session
-    },
-  },
 })
