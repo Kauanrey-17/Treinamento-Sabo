@@ -1,25 +1,33 @@
-import NextAuth from "next-auth"
-import { authConfig } from "@/lib/auth.config" // ← só o config, sem Prisma
+import { NextResponse } from "next/server"
+import type { NextRequest } from "next/server"
+import { getToken } from "next-auth/jwt"
 
-const { auth } = NextAuth(authConfig)
-
-export default auth((req) => {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
-  const isLoggedIn = !!req.auth
-  const role = (req.auth?.user as any)?.role
 
-  if (pathname.startsWith("/login")) return
+  // Permite login sem autenticação
+  if (pathname.startsWith("/login")) return NextResponse.next()
 
-  if (!isLoggedIn) {
-    return Response.redirect(new URL("/login", req.url))
+  // Lê o JWT direto — sem importar Prisma
+  const token = await getToken({
+    req,
+    secret: process.env.AUTH_SECRET,
+  })
+
+  // Não logado → redireciona para login
+  if (!token) {
+    return NextResponse.redirect(new URL("/login", req.url))
   }
 
+  // Rotas admin/relatorios — só para role admin
   if (pathname.startsWith("/admin") || pathname.startsWith("/relatorios")) {
-    if (role !== "admin") {
-      return Response.redirect(new URL("/", req.url))
+    if (token.role !== "admin") {
+      return NextResponse.redirect(new URL("/", req.url))
     }
   }
-})
+
+  return NextResponse.next()
+}
 
 export const config = {
   matcher: [
