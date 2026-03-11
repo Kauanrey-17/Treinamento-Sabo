@@ -1,302 +1,297 @@
 "use client"
 
 import { useState } from "react"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
-import { toast } from "sonner"
-import { HelpCircle, CheckCircle2, XCircle, Trophy, RotateCcw, ArrowRight } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Progress } from "@/components/ui/progress"
+import { useSession } from "next-auth/react"
+import { HelpCircle, CheckCircle2, XCircle, Loader2, ChevronRight, Trophy, RotateCcw } from "lucide-react"
 import { quizQuestions } from "@/lib/modulos-data"
-
-const schema = z.object({
-  nome: z.string().min(3, "Informe seu nome completo"),
-  respostas: z
-    .array(z.string())
-    .length(quizQuestions.length, `Responda todas as ${quizQuestions.length} perguntas`),
-})
-
-type FormData = z.infer<typeof schema>
-
-// ─── CRUD: CREATE ─────────────────────────────────────────────────────────────
-// POST /api/quiz → cria registro na tabela Quiz
-// Campos: nome, respostas (JSON), nota, dataRegistro (auto)
-// ─────────────────────────────────────────────────────────────────────────────
+import { toast } from "sonner"
 
 export default function QuizPage() {
-  const [resultado, setResultado] = useState<{
-    nota: number
-    total: number
-    acertos: number
-    respostasNum: number[]
-  } | null>(null)
+  const { data: session } = useSession()
+  const [atual, setAtual] = useState(0)
+  const [respostas, setRespostas] = useState<number[]>([])
+  const [selecionada, setSelecionada] = useState<number | null>(null)
+  const [confirmada, setConfirmada] = useState(false)
+  const [finalizado, setFinalizado] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [nota, setNota] = useState(0)
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<FormData>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      nome: "",
-      respostas: Array(quizQuestions.length).fill(""),
-    },
-  })
+  const pergunta = quizQuestions[atual]
+  const total = quizQuestions.length
+  const progresso = Math.round((atual / total) * 100)
 
-  const respostas = watch("respostas")
+  function handleSelecionar(idx: number) {
+    if (confirmada) return
+    setSelecionada(idx)
+  }
 
-  // Progresso do quiz
-  const respondidas = respostas.filter((r) => r !== "").length
-  const progresso = Math.round((respondidas / quizQuestions.length) * 100)
+  function handleConfirmar() {
+    if (selecionada === null) return
+    setConfirmada(true)
+  }
 
-  async function onSubmit(data: FormData) {
-    const respostasNum = data.respostas.map(Number)
-    let acertos = 0
-    quizQuestions.forEach((q, i) => {
-      if (respostasNum[i] === q.respostaCorreta) acertos++
-    })
-    const nota = (acertos / quizQuestions.length) * 10
-    setResultado({ nota, total: quizQuestions.length, acertos, respostasNum })
+  async function handleProximo() {
+    const novasRespostas = [...respostas, selecionada!]
+    setRespostas(novasRespostas)
 
-    try {
-      await fetch("/api/quiz", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome: data.nome, respostas: respostasNum, nota }),
+    if (atual + 1 >= total) {
+      // Calcular nota
+      let acertos = 0
+      novasRespostas.forEach((resp, i) => {
+        if (resp === quizQuestions[i].respostaCorreta) acertos++
       })
-      toast.success("Respostas enviadas com sucesso!")
-    } catch {
-      toast.error("Erro ao enviar respostas.")
+      const notaFinal = Math.round((acertos / total) * 10 * 10) / 10
+      setNota(notaFinal)
+      setFinalizado(true)
+
+      // Salvar no banco
+      setLoading(true)
+      try {
+        await fetch("/api/quiz", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nome: session?.user?.name ?? "Colaborador",
+            respostas: novasRespostas,
+            nota: notaFinal,
+          }),
+        })
+        toast.success("Resultado salvo com sucesso!")
+      } catch {
+        toast.error("Erro ao salvar resultado.")
+      } finally {
+        setLoading(false)
+      }
+    } else {
+      setAtual(atual + 1)
+      setSelecionada(null)
+      setConfirmada(false)
     }
   }
 
-  function handleRefazer() {
-    setResultado(null)
-    reset({ nome: "", respostas: Array(quizQuestions.length).fill("") })
+  function handleReiniciar() {
+    setAtual(0)
+    setRespostas([])
+    setSelecionada(null)
+    setConfirmada(false)
+    setFinalizado(false)
+    setNota(0)
   }
 
-  // ── Tela de resultado ────────────────────────────────────────────
-  if (resultado) {
-    const aprovado = resultado.nota >= 7
+  // Tela de resultado
+  if (finalizado) {
+    const acertos = respostas.filter((r, i) => r === quizQuestions[i].respostaCorreta).length
+    const aprovado = nota >= 7
     return (
-      <div className="mx-auto max-w-2xl space-y-6">
-        {/* Card principal do resultado */}
-        <div className={`rounded-2xl border p-8 text-center ${
-          aprovado
-            ? "border-green-500/20 bg-green-500/5"
-            : "border-red-500/20 bg-red-500/5"
-        }`}>
-          <div className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full ${
-            aprovado ? "bg-green-500/10" : "bg-red-500/10"
-          }`}>
+      <div className="max-w-lg mx-auto space-y-6">
+        {/* Resultado hero */}
+        <div className={`rounded-2xl p-8 text-center space-y-4 ${aprovado ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-red-500/10 border border-red-500/20"}`}>
+          <div className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full ${aprovado ? "bg-emerald-500/20" : "bg-red-500/20"}`}>
             {aprovado
-              ? <Trophy className="h-8 w-8 text-green-500" />
-              : <XCircle className="h-8 w-8 text-red-500" />
-            }
+              ? <Trophy className="h-10 w-10 text-emerald-500" />
+              : <XCircle className="h-10 w-10 text-red-500" />}
           </div>
-          <h2 className="text-2xl font-black text-foreground">
-            {aprovado ? "Parabéns! Aprovado!" : "Não foi dessa vez!"}
-          </h2>
-          <p className="mt-2 text-muted-foreground">
-            Você acertou {resultado.acertos} de {resultado.total} questões
-          </p>
-          <div className="mt-6 flex items-center justify-center gap-8">
-            <div>
-              <p className={`text-4xl font-black ${aprovado ? "text-green-500" : "text-red-500"}`}>
-                {resultado.nota.toFixed(1)}
-              </p>
-              <p className="text-xs text-muted-foreground">Nota</p>
+          <div>
+            <div className={`text-5xl font-black ${aprovado ? "text-emerald-500" : "text-red-500"}`}>
+              {nota.toFixed(1)}
             </div>
-            <div className="h-12 w-px bg-border" />
-            <div>
-              <p className="text-4xl font-black text-foreground">{resultado.acertos}/{resultado.total}</p>
-              <p className="text-xs text-muted-foreground">Acertos</p>
+            <div className="text-sm text-muted-foreground mt-1">de 10,0 pontos</div>
+          </div>
+          <div>
+            <div className={`text-xl font-bold ${aprovado ? "text-emerald-600" : "text-red-600"}`}>
+              {aprovado ? "🎉 Aprovado!" : "😔 Reprovado"}
             </div>
-            <div className="h-12 w-px bg-border" />
-            <div>
-              <p className="text-4xl font-black text-foreground">
-                {Math.round((resultado.acertos / resultado.total) * 100)}%
-              </p>
-              <p className="text-xs text-muted-foreground">Aproveitamento</p>
-            </div>
+            <p className="text-sm text-muted-foreground mt-1">
+              {aprovado
+                ? "Excelente! Você demonstrou domínio do conteúdo."
+                : "Não desanime. Revise os módulos e tente novamente."}
+            </p>
           </div>
         </div>
 
-        {/* Gabarito */}
-        <div className="space-y-3">
-          <h3 className="font-semibold text-foreground">Gabarito</h3>
+        {/* Resumo por pergunta */}
+        <div className="rounded-2xl border border-border bg-card p-5 space-y-3">
+          <h3 className="font-semibold text-sm">Revisão das respostas</h3>
           {quizQuestions.map((q, i) => {
-            const acertou = resultado.respostasNum[i] === q.respostaCorreta
+            const correto = respostas[i] === q.respostaCorreta
             return (
-              <div key={q.id} className={`rounded-xl border p-4 ${
-                acertou ? "border-green-500/20 bg-green-500/5" : "border-red-500/20 bg-red-500/5"
-              }`}>
-                <div className="flex items-start gap-3">
-                  <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                    acertou ? "bg-green-500/20 text-green-600" : "bg-red-500/20 text-red-600"
-                  }`}>
-                    {i + 1}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-foreground">{q.pergunta}</p>
-                    <div className="mt-2 space-y-1">
-                      <p className="text-xs text-green-600 dark:text-green-400">
-                        ✅ Resposta correta: {q.opcoes[q.respostaCorreta]}
+              <div key={i} className={`rounded-lg p-3 text-sm ${correto ? "bg-emerald-500/5 border border-emerald-500/20" : "bg-red-500/5 border border-red-500/20"}`}>
+                <div className="flex items-start gap-2">
+                  {correto
+                    ? <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                    : <XCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />}
+                  <div>
+                    <p className="font-medium text-foreground">{q.pergunta}</p>
+                    {!correto && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Resposta correta: <span className="font-semibold text-emerald-600">{q.opcoes[q.respostaCorreta]}</span>
                       </p>
-                      {!acertou && (
-                        <p className="text-xs text-red-500">
-                          ❌ Sua resposta: {q.opcoes[resultado.respostasNum[i]]}
-                        </p>
-                      )}
-                    </div>
+                    )}
                   </div>
-                  {acertou
-                    ? <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
-                    : <XCircle className="h-5 w-5 text-red-500 shrink-0" />
-                  }
                 </div>
               </div>
             )
           })}
         </div>
 
-        <Button variant="outline" onClick={handleRefazer} className="w-full gap-2">
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-xl border border-border bg-card p-4 text-center">
+            <div className="text-2xl font-black text-emerald-500">{acertos}</div>
+            <div className="text-xs text-muted-foreground mt-1">Acertos</div>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 text-center">
+            <div className="text-2xl font-black text-red-500">{total - acertos}</div>
+            <div className="text-xs text-muted-foreground mt-1">Erros</div>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 text-center">
+            <div className="text-2xl font-black text-primary">{Math.round((acertos / total) * 100)}%</div>
+            <div className="text-xs text-muted-foreground mt-1">Aproveitamento</div>
+          </div>
+        </div>
+
+        <button
+          onClick={handleReiniciar}
+          className="w-full h-11 rounded-xl border border-border bg-card text-sm font-medium flex items-center justify-center gap-2 hover:bg-muted/50 transition-colors"
+        >
           <RotateCcw className="h-4 w-4" />
-          Refazer o Quiz
-        </Button>
+          Tentar novamente
+        </button>
       </div>
     )
   }
 
-  // ── Formulário ───────────────────────────────────────────────────
+  // Quiz em andamento
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <div className="flex items-center gap-2">
-          <HelpCircle className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold text-foreground">Quiz Avaliativo</h1>
+    <div className="max-w-2xl mx-auto space-y-6">
+
+      {/* Header */}
+      <div className="space-y-1">
+        <div className="flex items-center gap-2 text-muted-foreground text-sm">
+          <HelpCircle className="h-4 w-4" />
+          <span>Avaliação de conhecimentos</span>
         </div>
-        <p className="mt-1 text-muted-foreground leading-relaxed">
-          Responda as {quizQuestions.length} perguntas abaixo. Nota mínima para aprovação: 7.0
+        <h1 className="text-3xl font-bold tracking-tight">Quiz</h1>
+        <p className="text-muted-foreground text-sm">
+          {total} perguntas · Mínimo 7,0 para aprovação
         </p>
       </div>
 
-      {/* Barra de progresso */}
-      <div className="space-y-1.5">
+      {/* Progress */}
+      <div className="space-y-2">
         <div className="flex justify-between text-xs text-muted-foreground">
-          <span>{respondidas} de {quizQuestions.length} respondidas</span>
-          <span>{progresso}%</span>
+          <span>Pergunta {atual + 1} de {total}</span>
+          <span>{progresso}% concluído</span>
         </div>
-        <Progress value={progresso} className="h-2" />
+        <div className="h-2 bg-muted rounded-full overflow-hidden">
+          <div
+            className="h-2 bg-primary rounded-full transition-all duration-500"
+            style={{ width: `${progresso}%` }}
+          />
+        </div>
+        {/* Dots */}
+        <div className="flex gap-1.5 justify-center pt-1">
+          {quizQuestions.map((_, i) => (
+            <div
+              key={i}
+              className={`h-1.5 rounded-full transition-all ${
+                i < atual ? "bg-primary w-4" : i === atual ? "bg-primary w-6" : "bg-muted w-1.5"
+              }`}
+            />
+          ))}
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-        {/* Nome */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="space-y-2">
-              <Label htmlFor="nome">Seu nome completo</Label>
-              <Input
-                id="nome"
-                placeholder="Ex.: João Santos"
-                {...register("nome")}
-                aria-invalid={!!errors.nome}
-              />
-              {errors.nome && <p className="text-xs text-destructive">{errors.nome.message}</p>}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Pergunta */}
+      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
+        <div className="flex items-start gap-3">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+            {atual + 1}
+          </span>
+          <h2 className="text-base font-semibold leading-snug text-foreground pt-0.5">
+            {pergunta.pergunta}
+          </h2>
+        </div>
 
-        {/* Questões */}
-        {quizQuestions.map((q, qIndex) => {
-          const respondida = respostas[qIndex] !== ""
-          return (
-            <Card key={q.id} className={`transition-all ${respondida ? "border-primary/30" : ""}`}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start gap-3">
-                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors ${
-                    respondida
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-primary/10 text-primary"
-                  }`}>
-                    {qIndex + 1}
-                  </span>
-                  <CardTitle className="text-base font-medium leading-relaxed">
-                    {q.pergunta}
-                  </CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <RadioGroup
-                  value={respostas[qIndex] ?? ""}
-                  onValueChange={(v) => {
-                    const updated = [...respostas]
-                    updated[qIndex] = v
-                    setValue("respostas", updated)
-                  }}
-                  className="space-y-2"
-                >
-                  {q.opcoes.map((opcao, oIndex) => {
-                    const selecionada = respostas[qIndex] === String(oIndex)
-                    return (
-                      <div
-                        key={oIndex}
-                        className={`flex items-center gap-3 rounded-lg border p-3 transition-all cursor-pointer ${
-                          selecionada
-                            ? "border-primary/40 bg-primary/5"
-                            : "border-border hover:bg-muted/50"
-                        }`}
-                        onClick={() => {
-                          const updated = [...respostas]
-                          updated[qIndex] = String(oIndex)
-                          setValue("respostas", updated)
-                        }}
-                      >
-                        <RadioGroupItem value={String(oIndex)} id={`q${qIndex}-o${oIndex}`} />
-                        <Label
-                          htmlFor={`q${qIndex}-o${oIndex}`}
-                          className="flex-1 cursor-pointer text-sm font-normal"
-                        >
-                          {opcao}
-                        </Label>
-                      </div>
-                    )
-                  })}
-                </RadioGroup>
-              </CardContent>
-            </Card>
-          )
-        })}
+        {/* Opções */}
+        <div className="space-y-2">
+          {pergunta.opcoes.map((opcao, i) => {
+            let estado = "default"
+            if (confirmada) {
+              if (i === pergunta.respostaCorreta) estado = "correta"
+              else if (i === selecionada) estado = "errada"
+            } else if (i === selecionada) {
+              estado = "selecionada"
+            }
 
-        {errors.respostas && (
-          <p className="text-sm text-destructive">{errors.respostas.message}</p>
+            return (
+              <button
+                key={i}
+                onClick={() => handleSelecionar(i)}
+                className={`w-full flex items-center gap-3 rounded-xl border p-4 text-sm text-left transition-all ${
+                  estado === "correta"
+                    ? "border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                    : estado === "errada"
+                    ? "border-red-500 bg-red-500/10 text-red-700 dark:text-red-400"
+                    : estado === "selecionada"
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border hover:border-primary/40 hover:bg-muted/50"
+                }`}
+              >
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-bold ${
+                  estado === "correta" ? "border-emerald-500 bg-emerald-500 text-white"
+                  : estado === "errada" ? "border-red-500 bg-red-500 text-white"
+                  : estado === "selecionada" ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-muted"
+                }`}>
+                  {confirmada && i === pergunta.respostaCorreta
+                    ? <CheckCircle2 className="h-3.5 w-3.5" />
+                    : confirmada && i === selecionada
+                    ? <XCircle className="h-3.5 w-3.5" />
+                    : String.fromCharCode(65 + i)}
+                </span>
+                {opcao}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Feedback */}
+        {confirmada && (
+          <div className={`rounded-lg p-3 text-sm ${
+            selecionada === pergunta.respostaCorreta
+              ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+              : "bg-red-500/10 text-red-700 dark:text-red-400"
+          }`}>
+            {selecionada === pergunta.respostaCorreta
+              ? "✔ Correto! Muito bem."
+              : `✘ Incorreto. A resposta certa é: "${pergunta.opcoes[pergunta.respostaCorreta]}"`}
+          </div>
         )}
 
-        <Button type="submit" className="w-full gap-2" disabled={isSubmitting}>
-          {isSubmitting ? (
-            <>
-              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Enviando...
-            </>
+        {/* Botões */}
+        <div className="flex justify-between pt-2">
+          {!confirmada ? (
+            <button
+              onClick={handleConfirmar}
+              disabled={selecionada === null}
+              className="ml-auto h-10 px-6 rounded-lg bg-primary text-primary-foreground text-sm font-semibold flex items-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Confirmar
+            </button>
           ) : (
-            <>
-              Enviar Respostas
-              <ArrowRight className="h-4 w-4" />
-            </>
+            <button
+              onClick={handleProximo}
+              disabled={loading}
+              className="ml-auto h-10 px-6 rounded-lg bg-primary text-primary-foreground text-sm font-semibold flex items-center gap-2 hover:bg-primary/90 transition-colors"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {atual + 1 >= total ? "Ver resultado" : "Próxima"}
+              {!loading && <ChevronRight className="h-4 w-4" />}
+            </button>
           )}
-        </Button>
-      </form>
+        </div>
+      </div>
     </div>
   )
 }

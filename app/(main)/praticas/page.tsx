@@ -1,257 +1,210 @@
 "use client"
 
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
-import { toast } from "sonner"
-import { CheckSquare, Hash, MessageSquare, Upload, LayoutGrid, ListTodo, CheckCircle2, RotateCcw } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { Progress } from "@/components/ui/progress"
 import { useState } from "react"
+import { useSession } from "next-auth/react"
+import { CheckSquare, CheckCircle2, Loader2, Zap, Circle } from "lucide-react"
+import { toast } from "sonner"
 
-const praticaItems = [
+const atividades = [
   {
     key: "criouCanal" as const,
-    label: "Criou um Canal",
-    desc: "Você criou um canal novo em uma equipe",
-    icon: Hash,
-    cor: "text-blue-500 bg-blue-500/10",
+    titulo: "Criar um canal no Teams",
+    descricao: "Acesse sua equipe, clique em '+ Adicionar canal' e crie um canal com o nome do seu setor.",
+    dica: "Canais organizam as conversas por tema. Use nomes claros como 'Projetos' ou 'Avisos'.",
   },
   {
     key: "enviouMensagem" as const,
-    label: "Enviou uma Mensagem",
-    desc: "Você enviou uma mensagem com @menção em um canal",
-    icon: MessageSquare,
-    cor: "text-green-500 bg-green-500/10",
+    titulo: "Enviar uma mensagem com @menção",
+    descricao: "No canal criado, escreva uma mensagem e use @nome para mencionar um colega.",
+    dica: "A @menção notifica a pessoa diretamente. Use para garantir que a mensagem seja vista.",
   },
   {
     key: "subiuArquivo" as const,
-    label: "Subiu um Arquivo",
-    desc: "Você fez upload de um arquivo na aba Arquivos de um canal",
-    icon: Upload,
-    cor: "text-yellow-500 bg-yellow-500/10",
+    titulo: "Subir um arquivo no canal",
+    descricao: "Acesse a aba 'Arquivos' do canal e faça upload de qualquer documento de teste.",
+    dica: "Arquivos enviados no canal ficam no SharePoint da equipe, acessíveis por todos os membros.",
   },
   {
     key: "criouBucket" as const,
-    label: "Criou um Bucket",
-    desc: "Você criou um bucket no Planner para organizar tarefas",
-    icon: LayoutGrid,
-    cor: "text-purple-500 bg-purple-500/10",
+    titulo: "Criar um bucket no Planner",
+    descricao: "Acesse o Planner pelo canal, crie um plano e adicione um bucket como 'A Fazer'.",
+    dica: "Buckets são colunas no Kanban. Use-os para separar tarefas por fase ou categoria.",
   },
   {
     key: "criouTarefa" as const,
-    label: "Criou uma Tarefa",
-    desc: "Você criou uma tarefa no Planner com prazo e atribuição",
-    icon: ListTodo,
-    cor: "text-orange-500 bg-orange-500/10",
+    titulo: "Criar uma tarefa e atribuí-la",
+    descricao: "Dentro do bucket, clique em '+' e crie uma tarefa com prazo e responsável.",
+    dica: "Tarefas com prazo e dono claro são concluídas 3x mais rápido. Sempre atribua responsáveis!",
   },
 ]
 
-const schema = z.object({
-  nome: z.string().min(3, "Informe seu nome completo"),
-  criouCanal: z.boolean(),
-  enviouMensagem: z.boolean(),
-  subiuArquivo: z.boolean(),
-  criouBucket: z.boolean(),
-  criouTarefa: z.boolean(),
-})
-
-type FormData = z.infer<typeof schema>
-
-// ─── CRUD: CREATE ─────────────────────────────────────────────────────────────
-// POST /api/praticas → cria registro na tabela Praticas
-// Campos: nome, criouCanal, enviouMensagem, subiuArquivo, criouBucket, criouTarefa
-// dataRegistro é gerado automaticamente pelo banco
-// ─────────────────────────────────────────────────────────────────────────────
+type PraticasForm = {
+  criouCanal: boolean
+  enviouMensagem: boolean
+  subiuArquivo: boolean
+  criouBucket: boolean
+  criouTarefa: boolean
+}
 
 export default function PraticasPage() {
-  const [registrado, setRegistrado] = useState(false)
-
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<FormData>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      nome: "",
-      criouCanal: false,
-      enviouMensagem: false,
-      subiuArquivo: false,
-      criouBucket: false,
-      criouTarefa: false,
-    },
+  const { data: session } = useSession()
+  const [form, setForm] = useState<PraticasForm>({
+    criouCanal: false,
+    enviouMensagem: false,
+    subiuArquivo: false,
+    criouBucket: false,
+    criouTarefa: false,
   })
+  const [loading, setLoading] = useState(false)
+  const [sucesso, setSucesso] = useState(false)
 
-  const valores = watch()
-  const concluidas = praticaItems.filter((item) => valores[item.key]).length
-  const progresso = Math.round((concluidas / praticaItems.length) * 100)
+  const feitas = Object.values(form).filter(Boolean).length
+  const total = atividades.length
+  const pct = Math.round((feitas / total) * 100)
 
-  async function onSubmit(data: FormData) {
+  async function handleSubmit() {
+    setLoading(true)
     try {
       const res = await fetch("/api/praticas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          nome: session?.user?.name ?? "Colaborador",
+          ...form,
+        }),
       })
       if (!res.ok) throw new Error()
-      setRegistrado(true)
+      setSucesso(true)
       toast.success("Práticas registradas com sucesso!")
     } catch {
       toast.error("Erro ao registrar práticas. Tente novamente.")
+    } finally {
+      setLoading(false)
     }
   }
 
-  function handleNovo() {
-    setRegistrado(false)
-    reset()
-  }
-
-  // ── Tela de sucesso ──────────────────────────────────────────────
-  if (registrado) {
+  if (sucesso) {
     return (
-      <div className="mx-auto max-w-lg">
-        <div className="flex flex-col items-center gap-4 rounded-2xl border border-green-500/20 bg-green-500/5 p-10 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10">
-            <CheckCircle2 className="h-8 w-8 text-green-500" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-foreground">Práticas Registradas!</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Você completou {concluidas} de {praticaItems.length} atividades.
-            </p>
-          </div>
-          <div className="w-full space-y-1.5">
-            <Progress value={progresso} className="h-3" />
-            <p className="text-xs text-muted-foreground">{progresso}% concluído</p>
-          </div>
-          <div className="w-full space-y-2">
-            {praticaItems.map((item) => {
-              const feito = valores[item.key]
-              return (
-                <div key={item.key} className={`flex items-center gap-3 rounded-lg border p-3 ${
-                  feito ? "border-green-500/20 bg-green-500/5" : "border-border opacity-50"
-                }`}>
-                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${item.cor}`}>
-                    <item.icon className="h-3.5 w-3.5" />
-                  </div>
-                  <span className="text-sm text-foreground flex-1 text-left">{item.label}</span>
-                  {feito
-                    ? <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    : <span className="text-xs text-muted-foreground">Pendente</span>
-                  }
-                </div>
-              )
-            })}
-          </div>
-          <Button variant="outline" onClick={handleNovo} className="w-full gap-2">
-            <RotateCcw className="h-4 w-4" />
-            Novo registro
-          </Button>
+      <div className="max-w-lg mx-auto flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
+        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 border border-primary/20">
+          <CheckCircle2 className="h-10 w-10 text-primary" />
         </div>
+        <div>
+          <h2 className="text-2xl font-bold">Práticas registradas!</h2>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Você completou <strong>{feitas} de {total}</strong> atividades práticas.
+            {feitas === total && " Parabéns, tudo concluído! 🎉"}
+          </p>
+        </div>
+        <div className="w-full rounded-xl border border-border bg-card p-4 space-y-2">
+          {atividades.map((at) => (
+            <div key={at.key} className="flex items-center gap-3 text-sm">
+              {form[at.key]
+                ? <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                : <Circle className="h-4 w-4 text-muted-foreground shrink-0" />}
+              <span className={form[at.key] ? "text-foreground" : "text-muted-foreground"}>{at.titulo}</span>
+            </div>
+          ))}
+        </div>
+        <button onClick={() => setSucesso(false)} className="text-sm text-primary hover:underline">
+          Atualizar registros
+        </button>
       </div>
     )
   }
 
-  // ── Formulário ───────────────────────────────────────────────────
   return (
-    <div className="mx-auto max-w-lg space-y-6">
-      <div>
-        <div className="flex items-center gap-2">
-          <CheckSquare className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold text-foreground">Registro de Práticas</h1>
+    <div className="max-w-2xl mx-auto space-y-6">
+
+      {/* Header */}
+      <div className="space-y-1">
+        <div className="flex items-center gap-2 text-muted-foreground text-sm">
+          <CheckSquare className="h-4 w-4" />
+          <span>Atividades práticas</span>
         </div>
-        <p className="mt-1 text-muted-foreground leading-relaxed">
-          Marque as atividades práticas que você já realizou no treinamento.
+        <h1 className="text-3xl font-bold tracking-tight">Práticas</h1>
+        <p className="text-muted-foreground text-sm leading-relaxed">
+          Marque as atividades que você realizou durante o treinamento. Seja honesto — este é seu registro de aprendizado.
         </p>
       </div>
 
-      {/* Progresso */}
-      <div className="space-y-1.5">
-        <div className="flex justify-between text-xs text-muted-foreground">
-          <span>{concluidas} de {praticaItems.length} atividades concluídas</span>
-          <span>{progresso}%</span>
+      {/* Progress */}
+      <div className="rounded-2xl border border-border bg-card p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-semibold">Progresso</span>
+          <span className="text-sm font-bold text-primary">{feitas}/{total} atividades</span>
         </div>
-        <Progress value={progresso} className="h-2" />
+        <div className="h-3 bg-muted rounded-full overflow-hidden">
+          <div
+            className={`h-3 rounded-full transition-all duration-500 ${
+              pct === 100 ? "bg-emerald-500" : "bg-primary"
+            }`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-xs text-muted-foreground">
+          <span>{pct}% concluído</span>
+          {pct === 100 && <span className="text-emerald-500 font-semibold">✔ Tudo completo!</span>}
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Checklist de Práticas</CardTitle>
-          <CardDescription>Informe seu nome e marque cada atividade concluída.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            {/* Nome */}
-            <div className="space-y-2">
-              <Label htmlFor="nome">Nome completo</Label>
-              <Input
-                id="nome"
-                placeholder="Ex.: Carlos Oliveira"
-                {...register("nome")}
-                aria-invalid={!!errors.nome}
-              />
-              {errors.nome && <p className="text-xs text-destructive">{errors.nome.message}</p>}
-            </div>
+      {/* Atividades */}
+      <div className="space-y-3">
+        {atividades.map((at, i) => (
+          <div
+            key={at.key}
+            onClick={() => setForm({ ...form, [at.key]: !form[at.key] })}
+            className={`group cursor-pointer rounded-2xl border p-5 transition-all duration-200 ${
+              form[at.key]
+                ? "border-primary/40 bg-primary/5 shadow-sm"
+                : "border-border bg-card hover:border-primary/30 hover:bg-muted/30"
+            }`}
+          >
+            <div className="flex items-start gap-4">
+              {/* Checkbox visual */}
+              <div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+                form[at.key]
+                  ? "border-primary bg-primary"
+                  : "border-muted-foreground/30 group-hover:border-primary/50"
+              }`}>
+                {form[at.key] && <CheckCircle2 className="h-4 w-4 text-primary-foreground" />}
+              </div>
 
-            {/* Itens */}
-            <div className="space-y-2">
-              {praticaItems.map((item) => {
-                const ativo = valores[item.key]
-                return (
-                  <div
-                    key={item.key}
-                    className={`flex items-center justify-between rounded-xl border p-3.5 transition-all ${
-                      ativo ? "border-primary/30 bg-primary/5" : "border-border hover:bg-muted/50"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${item.cor}`}>
-                        <item.icon className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <Label htmlFor={item.key} className="text-sm font-medium cursor-pointer">
-                          {item.label}
-                        </Label>
-                        <p className="text-xs text-muted-foreground">{item.desc}</p>
-                      </div>
-                    </div>
-                    <Switch
-                      id={item.key}
-                      checked={ativo}
-                      onCheckedChange={(v) => setValue(item.key, v)}
-                    />
-                  </div>
-                )
-              })}
-            </div>
+              <div className="flex-1 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono text-muted-foreground">#{String(i + 1).padStart(2, "0")}</span>
+                  <span className={`text-sm font-semibold ${form[at.key] ? "text-primary" : "text-foreground"}`}>
+                    {at.titulo}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">{at.descricao}</p>
 
-            <Button type="submit" className="w-full gap-2" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Salvando...
-                </>
-              ) : (
-                <>
-                  <CheckSquare className="h-4 w-4" />
-                  Salvar Práticas
-                </>
-              )}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+                {/* Dica */}
+                <div className="flex items-start gap-1.5 mt-2 text-xs text-muted-foreground/70">
+                  <Zap className="h-3 w-3 shrink-0 mt-0.5 text-yellow-500" />
+                  {at.dica}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Submit */}
+      <button
+        onClick={handleSubmit}
+        disabled={loading || feitas === 0}
+        className="w-full h-12 rounded-xl bg-primary text-primary-foreground text-sm font-bold flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+      >
+        {loading
+          ? <><Loader2 className="h-4 w-4 animate-spin" /> Salvando...</>
+          : <><CheckSquare className="h-4 w-4" /> Registrar {feitas} atividade{feitas !== 1 ? "s" : ""}</>
+        }
+      </button>
+
+      <p className="text-center text-xs text-muted-foreground pb-2">
+        Você pode marcar e desmarcar atividades antes de enviar. Após enviar, o registro fica salvo no sistema.
+      </p>
     </div>
   )
 }

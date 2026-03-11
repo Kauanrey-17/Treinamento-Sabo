@@ -1,241 +1,203 @@
 "use client"
 
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
-import { toast } from "sonner"
-import { useSession } from "next-auth/react"
-import { ClipboardCheck, CheckCircle2, User, Building2, Clock, Mail } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useState } from "react"
+import { useSession } from "next-auth/react"
+import { ClipboardCheck, CheckCircle2, Loader2, User, Building2, Clock, Mail } from "lucide-react"
+import { toast } from "sonner"
 
 const setores = ["Produção", "Qualidade", "Manutenção", "Logística", "Adm"] as const
 const turnos = ["Manhã", "Tarde", "Noite"] as const
 
-const schema = z.object({
-  nome: z.string().min(3, "Informe seu nome completo"),
-  setor: z.enum(setores, { required_error: "Selecione seu setor" }),
-  turno: z.enum(turnos, { required_error: "Selecione seu turno" }),
-  email: z.string().email("Informe um e-mail válido"),
-  presente: z.boolean(),
-})
-
-type FormData = z.infer<typeof schema>
-
-// ─── CRUD: CREATE ─────────────────────────────────────────────────────────────
-// POST /api/presenca → cria registro na tabela Presenca
-// Campos: nome, setor, turno, email, presente, dataRegistro (auto)
-// ─────────────────────────────────────────────────────────────────────────────
+type Setor = typeof setores[number]
+type Turno = typeof turnos[number]
 
 export default function PresencaPage() {
   const { data: session } = useSession()
-  const [registrado, setRegistrado] = useState(false)
-  const [dadosSalvos, setDadosSalvos] = useState<FormData | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [sucesso, setSucesso] = useState(false)
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<FormData>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      presente: true,
-      email: session?.user?.email ?? "",
-      nome: session?.user?.name ?? "",
-    },
+  const [form, setForm] = useState({
+    nome: session?.user?.name ?? "",
+    email: session?.user?.email ?? "",
+    setor: "" as Setor | "",
+    turno: "" as Turno | "",
   })
 
-  const presente = watch("presente")
-
-  async function onSubmit(data: FormData) {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.setor || !form.turno) {
+      toast.error("Selecione o setor e o turno.")
+      return
+    }
+    setLoading(true)
     try {
       const res = await fetch("/api/presenca", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...form, presente: true }),
       })
       if (!res.ok) throw new Error()
-      setDadosSalvos(data)
-      setRegistrado(true)
+      setSucesso(true)
       toast.success("Presença registrada com sucesso!")
     } catch {
       toast.error("Erro ao registrar presença. Tente novamente.")
+    } finally {
+      setLoading(false)
     }
   }
 
-  function handleNovo() {
-    setRegistrado(false)
-    setDadosSalvos(null)
-    reset({ presente: true, email: "", nome: "" })
-  }
-
-  // ── Tela de sucesso ──────────────────────────────────────────────
-  if (registrado && dadosSalvos) {
+  if (sucesso) {
     return (
-      <div className="mx-auto max-w-lg space-y-6">
-        <div className="flex flex-col items-center gap-4 rounded-2xl border border-green-500/20 bg-green-500/5 p-10 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10">
-            <CheckCircle2 className="h-8 w-8 text-green-500" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-foreground">Presença Confirmada!</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Seu registro foi salvo com sucesso.
-            </p>
-          </div>
-
-          <div className="w-full space-y-2 rounded-xl border border-border bg-card p-4 text-left">
-            {[
-              { icon: User, label: "Nome", valor: dadosSalvos.nome },
-              { icon: Building2, label: "Setor", valor: dadosSalvos.setor },
-              { icon: Clock, label: "Turno", valor: dadosSalvos.turno },
-              { icon: Mail, label: "E-mail", valor: dadosSalvos.email },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center gap-3">
-                <item.icon className="h-4 w-4 text-muted-foreground shrink-0" />
-                <span className="text-xs text-muted-foreground w-12">{item.label}</span>
-                <span className="text-sm font-medium text-foreground">{item.valor}</span>
-              </div>
-            ))}
-          </div>
-
-          <Button variant="outline" onClick={handleNovo} className="w-full">
-            Registrar outro participante
-          </Button>
+      <div className="max-w-lg mx-auto flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
+        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/20">
+          <CheckCircle2 className="h-10 w-10 text-emerald-500" />
         </div>
+        <div>
+          <h2 className="text-2xl font-bold">Presença confirmada!</h2>
+          <p className="text-muted-foreground mt-1">
+            Sua presença no treinamento foi registrada com sucesso, <strong>{form.nome.split(" ")[0]}</strong>.
+          </p>
+        </div>
+        <div className="w-full rounded-xl border border-border bg-card p-4 text-sm text-left space-y-2">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Nome</span>
+            <span className="font-medium">{form.nome}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Setor</span>
+            <span className="font-medium">{form.setor}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Turno</span>
+            <span className="font-medium">{form.turno}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Data</span>
+            <span className="font-medium">{new Date().toLocaleDateString("pt-BR")}</span>
+          </div>
+        </div>
+        <button
+          onClick={() => setSucesso(false)}
+          className="text-sm text-primary hover:underline"
+        >
+          Registrar novamente
+        </button>
       </div>
     )
   }
 
-  // ── Formulário ───────────────────────────────────────────────────
   return (
-    <div className="mx-auto max-w-lg space-y-6">
-      <div>
-        <div className="flex items-center gap-2">
-          <ClipboardCheck className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold text-foreground">Registro de Presença</h1>
+    <div className="max-w-lg mx-auto space-y-6">
+
+      {/* Header */}
+      <div className="space-y-1">
+        <div className="flex items-center gap-2 text-muted-foreground text-sm">
+          <ClipboardCheck className="h-4 w-4" />
+          <span>Registro de participação</span>
         </div>
-        <p className="mt-1 text-muted-foreground leading-relaxed">
-          Preencha seus dados para confirmar sua participação no treinamento.
+        <h1 className="text-3xl font-bold tracking-tight">Presença</h1>
+        <p className="text-muted-foreground text-sm leading-relaxed">
+          Confirme sua presença no treinamento Microsoft Teams. Este registro é obrigatório para certificação.
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Dados do Participante</CardTitle>
-          <CardDescription>Todos os campos são obrigatórios.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      {/* Form card */}
+      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <form onSubmit={handleSubmit} className="space-y-5">
 
-            {/* Nome */}
-            <div className="space-y-2">
-              <Label htmlFor="nome">Nome completo</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="nome"
-                  placeholder="Ex.: Maria da Silva"
-                  className="pl-9"
-                  {...register("nome")}
-                  aria-invalid={!!errors.nome}
-                />
-              </div>
-              {errors.nome && <p className="text-xs text-destructive">{errors.nome.message}</p>}
+          {/* Nome */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <User className="h-3.5 w-3.5" /> Nome completo
+            </label>
+            <input
+              type="text"
+              value={form.nome}
+              onChange={(e) => setForm({ ...form, nome: e.target.value })}
+              required
+              placeholder="Seu nome completo"
+              className="w-full h-11 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring transition-shadow"
+            />
+          </div>
+
+          {/* Email */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Mail className="h-3.5 w-3.5" /> E-mail corporativo
+            </label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              required
+              placeholder="seu.nome@sabo.com.br"
+              className="w-full h-11 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring transition-shadow"
+            />
+          </div>
+
+          {/* Setor */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Building2 className="h-3.5 w-3.5" /> Setor
+            </label>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+              {setores.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setForm({ ...form, setor: s })}
+                  className={`rounded-lg border px-2 py-2 text-xs font-medium transition-all ${
+                    form.setor === s
+                      ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
             </div>
+          </div>
 
-            {/* Setor + Turno lado a lado */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="setor">Setor</Label>
-                <Select onValueChange={(v) => setValue("setor", v as FormData["setor"])}>
-                  <SelectTrigger id="setor" aria-invalid={!!errors.setor}>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {setores.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                {errors.setor && <p className="text-xs text-destructive">{errors.setor.message}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="turno">Turno</Label>
-                <Select onValueChange={(v) => setValue("turno", v as FormData["turno"])}>
-                  <SelectTrigger id="turno" aria-invalid={!!errors.turno}>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {turnos.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                {errors.turno && <p className="text-xs text-destructive">{errors.turno.message}</p>}
-              </div>
+          {/* Turno */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5" /> Turno
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {turnos.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setForm({ ...form, turno: t })}
+                  className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-all ${
+                    form.turno === t
+                      ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
             </div>
+          </div>
 
-            {/* E-mail */}
-            <div className="space-y-2">
-              <Label htmlFor="email">E-mail corporativo</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="seu.nome@sabo.com.br"
-                  className="pl-9"
-                  {...register("email")}
-                  aria-invalid={!!errors.email}
-                />
-              </div>
-              {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
-            </div>
+          <button
+            type="submit"
+            disabled={loading || !form.setor || !form.turno}
+            className="w-full h-11 rounded-lg bg-primary text-primary-foreground text-sm font-semibold flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Registrando...</>
+            ) : (
+              <><ClipboardCheck className="h-4 w-4" /> Confirmar presença</>
+            )}
+          </button>
+        </form>
+      </div>
 
-            {/* Presente toggle */}
-            <div className={`flex items-center justify-between rounded-xl border p-4 transition-colors ${
-              presente ? "border-green-500/30 bg-green-500/5" : "border-border"
-            }`}>
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  {presente ? "✅ Presente" : "❌ Ausente"}
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Confirmo minha presença no treinamento
-                </p>
-              </div>
-              <Switch
-                id="presente"
-                checked={presente}
-                onCheckedChange={(v) => setValue("presente", v)}
-              />
-            </div>
-
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <span className="flex items-center gap-2">
-                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Registrando...
-                </span>
-              ) : (
-                <span className="flex items-center gap-2">
-                  <ClipboardCheck className="h-4 w-4" />
-                  Registrar Presença
-                </span>
-              )}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+      <p className="text-center text-xs text-muted-foreground">
+        Sua presença será vinculada ao seu cadastro no sistema SABO.
+      </p>
     </div>
   )
 }
