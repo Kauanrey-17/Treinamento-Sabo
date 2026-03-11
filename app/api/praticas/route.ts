@@ -1,3 +1,4 @@
+export const runtime = "nodejs"
 import { NextResponse } from "next/server"
 import { addPraticas, listPraticas } from "@/lib/db"
 import type { PraticasRecord } from "@/lib/types"

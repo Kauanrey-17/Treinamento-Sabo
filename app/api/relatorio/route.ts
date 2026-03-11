@@ -1,3 +1,4 @@
+export const runtime = "nodejs"
 import { NextResponse } from "next/server"
 import { listPresenca, listQuiz, listPraticas } from "@/lib/db"
 import generateReport from "@/lib/report-template"
