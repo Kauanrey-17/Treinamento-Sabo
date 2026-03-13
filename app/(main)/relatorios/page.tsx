@@ -1,150 +1,153 @@
 "use client"
 
-import { useState } from "react"
-import { FileText, Download, ExternalLink, RefreshCw, BarChart3, Users, Brain, Zap } from "lucide-react"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { ArrowLeft, BarChart3, Users, ClipboardCheck, HelpCircle, CheckSquare, TrendingUp, Award, Download, Loader2 } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
-import { toast } from "sonner"
+import { Badge } from "@/components/ui/badge"
 
 export default function RelatoriosPage() {
-  const [loading, setLoading] = useState(false)
+  const router = useRouter()
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
 
-  async function handleGerar(modo: "visualizar" | "imprimir") {
-    setLoading(true)
-    try {
-      const res = await fetch("/api/relatorio")
-      if (!res.ok) throw new Error()
-      const html = await res.text()
-
-      const blob = new Blob([html], { type: "text/html;charset=utf-8" })
-      const url = URL.createObjectURL(blob)
-      const win = window.open(url, "_blank")
-
-      if (modo === "imprimir" && win) {
-        win.onload = () => {
-          win.print()
-        }
-      }
-
-      toast.success("Relatório gerado com sucesso!")
-    } catch {
-      toast.error("Erro ao gerar relatório.")
-    } finally {
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/presenca").then(r => r.json()),
+      fetch("/api/quiz").then(r => r.json()),
+      fetch("/api/praticas").then(r => r.json()),
+      fetch("/api/funcionarios").then(r => r.json()),
+    ]).then(([presenca, quiz, praticas, funcionarios]) => {
+      setData({ presenca, quiz, praticas, funcionarios })
       setLoading(false)
-    }
-  }
+    }).catch(() => setLoading(false))
+  }, [])
 
-  async function handleBaixarHTML() {
-    setLoading(true)
-    try {
-      const res = await fetch("/api/relatorio")
-      if (!res.ok) throw new Error()
-      const html = await res.text()
+  if (loading) return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  )
 
-      const blob = new Blob([html], { type: "text/html;charset=utf-8" })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `relatorio-sabo-${new Date().toISOString().split("T")[0]}.html`
-      a.click()
-      URL.revokeObjectURL(url)
+  const presenca = data?.presenca ?? []
+  const quiz = data?.quiz ?? []
+  const praticas = data?.praticas ?? []
+  const funcionarios = data?.funcionarios ?? []
 
-      toast.success("Arquivo baixado!")
-    } catch {
-      toast.error("Erro ao baixar relatório.")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const recursos = [
-    { icon: Users, label: "Presença", desc: "Lista completa de presenças com percentual de comparecimento" },
-    { icon: Brain, label: "Quiz", desc: "Notas individuais, média geral e taxa de aprovação" },
-    { icon: Zap, label: "Práticas", desc: "Atividades concluídas por participante com progresso visual" },
-    { icon: BarChart3, label: "Estatísticas", desc: "Cards de resumo com totais e indicadores de desempenho" },
-  ]
+  const avgNota = quiz.length > 0 ? (quiz.reduce((a: number, q: any) => a + Number(q.nota), 0) / quiz.length).toFixed(1) : "—"
+  const aprovados = quiz.filter((q: any) => Number(q.nota) >= 7).length
+  const presentes = presenca.filter((p: any) => p.presente).length
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <div className="flex items-center gap-2">
-          <FileText className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold text-foreground">Relatórios</h1>
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-3">
+          <button onClick={() => router.push("/")} className="flex h-9 w-9 items-center justify-center rounded-xl border border-border hover:bg-muted transition-colors">
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Relatórios</h1>
+            <p className="text-sm text-muted-foreground">Visão geral do treinamento</p>
+          </div>
         </div>
-        <p className="mt-1 text-muted-foreground leading-relaxed">
-          Gere relatórios completos do treinamento em tempo real com todos os dados do sistema.
-        </p>
       </div>
 
-      {/* Card principal */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-              <FileText className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <CardTitle>Relatório Geral de Treinamento</CardTitle>
-              <CardDescription>Presença, quiz e práticas de todos os participantes — gerado em tempo real</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
-
-          {/* Recursos incluídos */}
-          <div className="grid grid-cols-2 gap-3">
-            {recursos.map((item) => (
-              <div key={item.label} className="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                  <item.icon className="h-3.5 w-3.5 text-primary" />
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-foreground">{item.label}</div>
-                  <div className="text-xs text-muted-foreground leading-snug mt-0.5">{item.desc}</div>
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {[
+          { label: "Funcionários", value: funcionarios.length, icon: Users, color: "text-blue-500 bg-blue-500/10" },
+          { label: "Presenças", value: presentes + "/" + presenca.length, icon: ClipboardCheck, color: "text-emerald-500 bg-emerald-500/10" },
+          { label: "Quiz Realizados", value: quiz.length, icon: HelpCircle, color: "text-violet-500 bg-violet-500/10" },
+          { label: "Práticas", value: praticas.length, icon: CheckSquare, color: "text-orange-500 bg-orange-500/10" },
+        ].map(stat => (
+          <Card key={stat.label} className="border-border/50">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{stat.label}</p>
+                <div className={"h-8 w-8 rounded-lg flex items-center justify-center " + stat.color}>
+                  <stat.icon className="h-4 w-4" />
                 </div>
               </div>
-            ))}
+              <p className="text-2xl font-bold">{stat.value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Quiz stats */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card className="border-border/50">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold">Média Geral</span>
+            </div>
+            <p className="text-4xl font-bold">{avgNota}</p>
+            <p className="text-xs text-muted-foreground mt-1">pontos de 10</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-2">
+              <Award className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold">Aprovados</span>
+            </div>
+            <p className="text-4xl font-bold">{aprovados}</p>
+            <p className="text-xs text-muted-foreground mt-1">nota ≥ 7.0</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-2">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold">Taxa Aprovação</span>
+            </div>
+            <p className="text-4xl font-bold">{quiz.length > 0 ? Math.round(aprovados / quiz.length * 100) : 0}%</p>
+            <p className="text-xs text-muted-foreground mt-1">dos realizados</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tabela quiz */}
+      <Card className="border-border/50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Resultados do Quiz</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nome</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nota</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Data</th>
+                </tr>
+              </thead>
+              <tbody>
+                {quiz.slice(0, 20).map((r: any) => (
+                  <tr key={r.id} className="border-b border-border/50 hover:bg-muted/20">
+                    <td className="px-4 py-3 font-medium">{r.nome || r.funcionario?.nome || "—"}</td>
+                    <td className="px-4 py-3">
+                      <span className={"font-bold " + (Number(r.nota) >= 7 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
+                        {Number(r.nota).toFixed(1)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant={Number(r.nota) >= 7 ? "default" : "destructive"} className="text-xs">
+                        {Number(r.nota) >= 7 ? "Aprovado" : "Reprovado"}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{new Date(r.dataRegistro).toLocaleDateString("pt-BR")}</td>
+                  </tr>
+                ))}
+                {quiz.length === 0 && (
+                  <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">Nenhum resultado ainda.</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
-
-          {/* Ações */}
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-            <Button
-              onClick={() => handleGerar("visualizar")}
-              disabled={loading}
-              className="gap-2"
-            >
-              {loading ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                <ExternalLink className="h-4 w-4" />
-              )}
-              Visualizar Relatório
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={handleBaixarHTML}
-              disabled={loading}
-              className="gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Baixar HTML
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={() => handleGerar("imprimir")}
-              disabled={loading}
-              className="gap-2"
-            >
-              <FileText className="h-4 w-4" />
-              Imprimir / Salvar PDF
-            </Button>
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            💡 Para salvar como PDF: clique em "Imprimir / Salvar PDF" e selecione "Salvar como PDF" na janela de impressão do navegador.
-          </p>
         </CardContent>
       </Card>
     </div>
