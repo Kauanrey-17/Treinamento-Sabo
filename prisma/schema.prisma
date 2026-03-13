@@ -7,6 +7,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─────────────────────────────────────────────
+// USUÁRIOS
+// ─────────────────────────────────────────────
 
 model Admin {
   id        String   @id @default(uuid())
@@ -16,41 +19,148 @@ model Admin {
   criadoEm DateTime @default(now())
 }
 
+model Setor {
+  id           String         @id @default(uuid())
+  nome         String         @unique
+  ativo        Boolean        @default(true)
+  criadoEm     DateTime       @default(now())
+  funcionarios Funcionario[]
+  cursos       CursoSetor[]
+}
+
 model Funcionario {
+  id               String             @id @default(uuid())
+  nome             String
+  email            String             @unique
+  senha            String
+  ativo            Boolean            @default(true)
+  criadoEm         DateTime           @default(now())
+  setorId          String?
+  setor            Setor?             @relation(fields: [setorId], references: [id])
+  progressos       Progresso[]
+  respostasQuiz    RespostaQuiz[]
+  registrosPratica RegistroPratica[]
+  presencas        Presenca[]
+}
+
+// ─────────────────────────────────────────────
+// CURSOS E CONTEÚDO
+// ─────────────────────────────────────────────
+
+model Curso {
+  id          String       @id @default(uuid())
+  titulo      String
+  descricao   String
+  icone       String       @default("BookOpen")
+  cor         String       @default("blue")
+  ativo       Boolean      @default(true)
+  ordem       Int          @default(0)
+  criadoEm   DateTime     @default(now())
+  atualizadoEm DateTime   @updatedAt
+  setores     CursoSetor[]
+  modulos     Modulo[]
+  perguntas   QuizPergunta[]
+  praticas    PraticaItem[]
+  progressos  Progresso[]
+  respostasQuiz RespostaQuiz[]
+  registrosPratica RegistroPratica[]
+}
+
+model CursoSetor {
+  id       String @id @default(uuid())
+  cursoId  String
+  setorId  String
+  curso    Curso  @relation(fields: [cursoId], references: [id], onDelete: Cascade)
+  setor    Setor  @relation(fields: [setorId], references: [id], onDelete: Cascade)
+
+  @@unique([cursoId, setorId])
+}
+
+model Modulo {
   id        String   @id @default(uuid())
-  nome      String
-  email     String   @unique
-  senha     String
-  setor     String
+  cursoId   String
+  titulo    String
+  conteudo  String   @db.Text
+  ordem     Int      @default(0)
   ativo     Boolean  @default(true)
   criadoEm DateTime @default(now())
+  curso     Curso    @relation(fields: [cursoId], references: [id], onDelete: Cascade)
+}
+
+model QuizPergunta {
+  id              String   @id @default(uuid())
+  cursoId         String
+  pergunta        String
+  opcoes          Json
+  respostaCorreta Int
+  ordem           Int      @default(0)
+  ativo           Boolean  @default(true)
+  criadoEm       DateTime @default(now())
+  curso           Curso    @relation(fields: [cursoId], references: [id], onDelete: Cascade)
+}
+
+model PraticaItem {
+  id        String   @id @default(uuid())
+  cursoId   String
+  titulo    String
+  descricao String?
+  ordem     Int      @default(0)
+  ativo     Boolean  @default(true)
+  criadoEm DateTime @default(now())
+  curso     Curso    @relation(fields: [cursoId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────
+// PROGRESSO E REGISTROS
+// ─────────────────────────────────────────────
+
+model Progresso {
+  id            String           @id @default(uuid())
+  funcionarioId String
+  cursoId       String
+  status        StatusProgresso  @default(NAO_INICIADO)
+  iniciadoEm    DateTime?
+  concluidoEm   DateTime?
+  funcionario   Funcionario      @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
+  curso         Curso            @relation(fields: [cursoId], references: [id], onDelete: Cascade)
+
+  @@unique([funcionarioId, cursoId])
+}
+
+enum StatusProgresso {
+  NAO_INICIADO
+  EM_ANDAMENTO
+  CONCLUIDO
+}
+
+model RespostaQuiz {
+  id            String      @id @default(uuid())
+  funcionarioId String
+  cursoId       String
+  respostas     Json
+  nota          Float
+  dataRegistro  DateTime    @default(now())
+  funcionario   Funcionario @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
+  curso         Curso       @relation(fields: [cursoId], references: [id], onDelete: Cascade)
+}
+
+model RegistroPratica {
+  id            String      @id @default(uuid())
+  funcionarioId String
+  cursoId       String
+  itensFeitos   Json
+  dataRegistro  DateTime    @default(now())
+  funcionario   Funcionario @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
+  curso         Curso       @relation(fields: [cursoId], references: [id], onDelete: Cascade)
 }
 
 model Presenca {
-  id           String   @id @default(uuid())
-  nome         String
-  setor        String
-  turno        String
-  email        String
-  presente     Boolean  @default(true)
-  dataRegistro DateTime @default(now())
-}
-
-model Quiz {
-  id           String   @id @default(uuid())
-  nome         String
-  respostas    Json
-  nota         Float
-  dataRegistro DateTime @default(now())
-}
-
-model Praticas {
-  id             String   @id @default(uuid())
-  nome           String
-  criouCanal     Boolean  @default(false)
-  enviouMensagem Boolean  @default(false)
-  subiuArquivo   Boolean  @default(false)
-  criouBucket    Boolean  @default(false)
-  criouTarefa    Boolean  @default(false)
-  dataRegistro   DateTime @default(now())
+  id            String      @id @default(uuid())
+  funcionarioId String?
+  nome          String
+  email         String
+  turno         String
+  presente      Boolean     @default(true)
+  dataRegistro  DateTime    @default(now())
+  funcionario   Funcionario? @relation(fields: [funcionarioId], references: [id], onDelete: SetNull)
 }

@@ -1,123 +1,101 @@
+import { auth } from "@/lib/auth"
 import { NextResponse } from "next/server"
-import type { NextRequest } from "next/server"
-
-// ─────────────────────────────────────────────
-// CONFIGURAÇÃO CENTRAL DE ROTAS
-// ─────────────────────────────────────────────
-
-const ROTAS = {
-  // Rotas públicas — sem autenticação
-  publicas: ["/login", "/cadastro", "/esqueci-senha"],
-
-  // Rotas exclusivas para admin
-  apenasAdmin: ["/admin", "/relatorios"],
-
-  // Rotas exclusivas para funcionários (admin também pode acessar)
-  apenasFuncionario: ["/presenca", "/quiz", "/praticas"],
-
-  // Após login, redireciona para:
-  posLogin: "/",
-
-  // Se não autenticado, redireciona para:
-  loginUrl: "/login",
-
-  // Se sem permissão, redireciona para:
-  semPermissao: "/",
+ 
+// ─────────────────────────────────────────────────────────────
+// ROTAS
+// ─────────────────────────────────────────────────────────────
+ 
+const ROTAS_PUBLICAS = ["/login"]
+const ROTAS_ADMIN = ["/admin", "/relatorios"]
+const ROTA_POS_LOGIN = "/"
+const ROTA_LOGIN = "/login"
+const ROTA_SEM_PERMISSAO = "/"
+ 
+// ─────────────────────────────────────────────────────────────
+// SECURITY HEADERS — padrão enterprise
+// ─────────────────────────────────────────────────────────────
+ 
+function applySecurityHeaders(res: NextResponse): NextResponse {
+  res.headers.set("X-Frame-Options", "DENY")
+  res.headers.set("X-Content-Type-Options", "nosniff")
+  res.headers.set("X-XSS-Protection", "1; mode=block")
+  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin")
+  res.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+  res.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+  res.headers.set("Content-Security-Policy", [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: blob: https:",
+    "connect-src 'self' https:",
+  ].join("; "))
+  return res
 }
-
-// ─────────────────────────────────────────────
+ 
+// ─────────────────────────────────────────────────────────────
 // HELPERS
-// ─────────────────────────────────────────────
-
-function getSessionToken(req: NextRequest): string | undefined {
-  return (
-    req.cookies.get("next-auth.session-token")?.value ||
-    req.cookies.get("__Secure-next-auth.session-token")?.value ||
-    req.cookies.get("authjs.session-token")?.value ||
-    req.cookies.get("__Secure-authjs.session-token")?.value
-  )
+// ─────────────────────────────────────────────────────────────
+ 
+function matchRoute(pathname: string, routes: string[]): boolean {
+  return routes.some((r) => pathname === r || pathname.startsWith(r + "/"))
 }
-
-function getRoleFromToken(req: NextRequest): string | null {
-  try {
-    const token = getSessionToken(req)
-    if (!token) return null
-    const parts = token.split(".")
-    if (parts.length !== 3) return null
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")))
-    return payload?.role ?? null
-  } catch {
-    return null
-  }
+ 
+function isPublic(pathname: string): boolean {
+  return matchRoute(pathname, ROTAS_PUBLICAS)
 }
-
-function matchesRoute(pathname: string, rotas: string[]): boolean {
-  return rotas.some((rota) => pathname === rota || pathname.startsWith(rota + "/"))
+ 
+function isAdminRoute(pathname: string): boolean {
+  return matchRoute(pathname, ROTAS_ADMIN)
 }
-
-function isPublica(pathname: string): boolean {
-  return matchesRoute(pathname, ROTAS.publicas)
-}
-
-function addSecurityHeaders(response: NextResponse): NextResponse {
-  response.headers.set("X-Frame-Options", "DENY")
-  response.headers.set("X-Content-Type-Options", "nosniff")
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin")
-  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-  response.headers.set(
-    "Strict-Transport-Security",
-    "max-age=63072000; includeSubDomains; preload"
-  )
-  return response
-}
-
-// ─────────────────────────────────────────────
+ 
+// ─────────────────────────────────────────────────────────────
 // MIDDLEWARE PRINCIPAL
-// ─────────────────────────────────────────────
-
-export function middleware(req: NextRequest) {
+// ─────────────────────────────────────────────────────────────
+ 
+export default auth((req) => {
   const { pathname } = req.nextUrl
-  const sessionToken = getSessionToken(req)
-  const isLoggedIn = !!sessionToken
-  const role = getRoleFromToken(req)
-
-  // ── 1. Rota pública ──────────────────────────
-  if (isPublica(pathname)) {
-    // Se já logado e tentar acessar /login → redireciona para home
-    if (isLoggedIn && pathname.startsWith("/login")) {
-      const res = NextResponse.redirect(new URL(ROTAS.posLogin, req.url))
-      return addSecurityHeaders(res)
+  const isLoggedIn = !!req.auth
+  const role = (req.auth?.user as any)?.role as string | undefined
+ 
+  // ── 1. Rota pública (/login) ──────────────────
+  if (isPublic(pathname)) {
+    // Já logado tentando acessar /login → redireciona para home
+    if (isLoggedIn) {
+      const res = NextResponse.redirect(new URL(ROTA_POS_LOGIN, req.url))
+      return applySecurityHeaders(res)
     }
     const res = NextResponse.next()
-    return addSecurityHeaders(res)
+    return applySecurityHeaders(res)
   }
-
-  // ── 2. Não autenticado ───────────────────────
+ 
+  // ── 2. Não autenticado → redireciona para login ──
   if (!isLoggedIn) {
-    const loginUrl = new URL(ROTAS.loginUrl, req.url)
-    loginUrl.searchParams.set("callbackUrl", pathname)
+    const loginUrl = new URL(ROTA_LOGIN, req.url)
+    loginUrl.searchParams.set("callbackUrl", encodeURIComponent(pathname))
     const res = NextResponse.redirect(loginUrl)
-    return addSecurityHeaders(res)
+    return applySecurityHeaders(res)
   }
-
-  // ── 3. Rotas exclusivas de admin ─────────────
-  if (matchesRoute(pathname, ROTAS.apenasAdmin) && role !== "admin") {
-    const res = NextResponse.redirect(new URL(ROTAS.semPermissao, req.url))
-    return addSecurityHeaders(res)
+ 
+  // ── 3. Rota de admin sem permissão ───────────────
+  if (isAdminRoute(pathname) && role !== "admin") {
+    const res = NextResponse.redirect(new URL(ROTA_SEM_PERMISSAO, req.url))
+    return applySecurityHeaders(res)
   }
-
-  // ── 5. Autorizado ────────────────────────────
+ 
+  // ── 4. Autorizado → passa com headers ────────────
   const res = NextResponse.next()
   if (role) res.headers.set("x-user-role", role)
-  return addSecurityHeaders(res)
-}
-
-// ─────────────────────────────────────────────
-// MATCHER
-// ─────────────────────────────────────────────
-
+  if (req.auth?.user?.email) res.headers.set("x-user-email", req.auth.user.email)
+  return applySecurityHeaders(res)
+})
+ 
+// ─────────────────────────────────────────────────────────────
+// MATCHER — exclui assets estáticos e rotas de API
+// ─────────────────────────────────────────────────────────────
+ 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2)$).*)",
+    "/((?!api|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf|otf|map)$).*)",
   ],
 }
